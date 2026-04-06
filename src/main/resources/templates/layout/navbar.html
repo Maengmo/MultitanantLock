@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--/* 공통 네비게이션 바 - 테넌트별 테마 적용 */-->
+<nav th:fragment="navbar(tenantId)" class="navbar navbar-expand-lg navbar-dark"
+     th:classappend="${tenantId == 'townboard'} ? 'bg-townboard' : (${tenantId == 'joongang'} ? 'bg-joongang' : 'bg-secondary')">
+  <div class="container">
+    <a class="navbar-brand fw-bold" th:href="@{/}">
+      <span th:if="${tenantId == 'townboard'}">📺 TOWNBOARD</span>
+      <span th:if="${tenantId == 'joongang'}">📰 JOONGANG</span>
+      <span th:unless="${tenantId == 'townboard' or tenantId == 'joongang'}"
+            th:text="${tenantId?.toUpperCase()} + ' CLM'">DEFAULT CLM</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navMenu">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/}">홈</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/content}">콘텐츠</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/lock-test}">🔒 Lock 테스트</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" th:href="@{/batch-log}">📋 배치 로그</a>
+        </li>
+      </ul>
+      <span class="navbar-text ms-3">
+        <span class="badge bg-light text-dark" th:text="'Tenant: ' + ${tenantId}">Tenant: -</span>
+      </span>
+    </div>
+  </div>
+</nav>
+</body>
+</html>

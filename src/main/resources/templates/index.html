@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title th:text="${tenantLabel} + ' - CLM 멀티테넌트'">CLM 멀티테넌트</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<div th:replace="~{layout/navbar :: navbar(${tenantId})}"></div>
+
+<div class="container mt-5">
+
+  <!-- 테넌트 헤더 배너 -->
+  <div class="tenant-hero p-5 rounded-4 mb-5 text-white text-center shadow"
+       th:classappend="${tenantId == 'townboard'} ? 'hero-townboard' : (${tenantId == 'joongang'} ? 'hero-joongang' : 'hero-default')">
+    <h1 class="display-5 fw-bold" th:text="${tenantLabel}">Tenant</h1>
+    <p class="lead mt-2">SaaS 멀티테넌트 · 동시성 제어 테스트 환경</p>
+    <div class="mt-3">
+      <span class="badge bg-white text-dark fs-6 me-2" th:text="'도메인: ' + ${tenantId} + '.clm.joins.net'">도메인</span>
+      <span class="badge bg-white text-dark fs-6" th:text="'콘텐츠: ' + ${contentCount} + '건'">콘텐츠</span>
+    </div>
+  </div>
+
+  <!-- 핵심 검증 포인트 -->
+  <div class="row g-4 mb-5">
+    <div class="col-md-6">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center mb-3">
+            <span class="fs-2 me-3">🏢</span>
+            <h5 class="card-title mb-0 fw-bold">멀티테넌트 데이터 분리</h5>
+          </div>
+          <p class="text-muted">
+            서브도메인 기반으로 테넌트를 식별하고, <code>TENANT_ID</code> 컬럼으로 데이터를 격리합니다.
+            같은 API 엔드포인트를 호출해도 이 테넌트의 데이터만 조회됩니다.
+          </p>
+          <div class="d-flex gap-2 mt-3">
+            <span class="badge bg-info text-dark">ThreadLocal TenantContext</span>
+            <span class="badge bg-info text-dark">Interceptor</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card h-100 border-0 shadow-sm">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center mb-3">
+            <span class="fs-2 me-3">🔒</span>
+            <h5 class="card-title mb-0 fw-bold">동시성 제어 (Lock)</h5>
+          </div>
+          <p class="text-muted">
+            동시 요청 시 데이터가 깨지지 않도록 3가지 Lock 전략을 검증합니다.
+            실시간으로 대기(WAITING)와 처리(DONE) 상태를 확인할 수 있습니다.
+          </p>
+          <div class="d-flex gap-2 mt-3">
+            <span class="badge bg-warning text-dark">Pessimistic Lock</span>
+            <span class="badge bg-warning text-dark">SKIP LOCKED</span>
+            <span class="badge bg-warning text-dark">ShedLock</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 동적 UI 핵심 포인트 -->
+  <div class="card border-0 shadow-sm mb-5">
+    <div class="card-body p-4">
+      <h5 class="fw-bold mb-3">🎨 테넌트별 동적 폼 (TB_FORM_DEFINITION)</h5>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="alert alert-primary mb-0">
+            <strong>📺 townboard</strong>
+            <ul class="mb-0 mt-2">
+              <li>제목 (text)</li>
+              <li>노출시간 (number) ← townboard 전용</li>
+              <li>디스플레이 타입 (select)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="alert alert-danger mb-0">
+            <strong>📰 joongang</strong>
+            <ul class="mb-0 mt-2">
+              <li>제목 (text)</li>
+              <li>카테고리 (select) ← joongang 전용</li>
+              <li>게시일 (date)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 퀵 액션 버튼 -->
+  <div class="d-flex gap-3 justify-content-center flex-wrap">
+    <a th:href="@{/content/new}" class="btn btn-lg btn-primary px-4">
+      ✏️ 콘텐츠 등록 (동적 폼)
+    </a>
+    <a th:href="@{/content}" class="btn btn-lg btn-outline-primary px-4">
+      📋 콘텐츠 목록
+    </a>
+    <a th:href="@{/lock-test}" class="btn btn-lg btn-warning px-4 text-dark">
+      🔒 Lock 테스트 시작
+    </a>
+  </div>
+
+</div>
+
+<footer class="mt-5 py-4 text-center text-muted border-top">
+  <small>SaaS CLM Multi-Tenant Test · tenant: <strong th:text="${tenantId}">-</strong></small>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

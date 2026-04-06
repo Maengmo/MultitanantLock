@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>콘텐츠 목록</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+</head>
+<body>
+
+<div th:replace="~{layout/navbar :: navbar(${tenantId})}"></div>
+
+<div class="container mt-4">
+
+  <!-- 헤더 -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="fw-bold mb-1">📋 콘텐츠 목록</h3>
+      <span class="text-muted">tenant: <strong th:text="${tenantId}">-</strong></span>
+    </div>
+    <a th:href="@{/content/new}" class="btn btn-primary">+ 새 콘텐츠</a>
+  </div>
+
+  <!-- 성공 메시지 -->
+  <div th:if="${successMsg}" class="alert alert-success alert-dismissible fade show" role="alert">
+    <span th:text="${successMsg}"></span>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+
+  <!-- 데이터 분리 안내 -->
+  <div class="alert alert-info d-flex align-items-center mb-4">
+    <span class="me-2">🔍</span>
+    <span>
+      이 목록은 <strong th:text="${tenantId}">tenant</strong> 테넌트의 데이터만 표시됩니다.
+      다른 테넌트의 콘텐츠는 조회되지 않습니다. (<code>WHERE TENANT_ID = '[[${tenantId}]]'</code>)
+    </span>
+  </div>
+
+  <!-- 콘텐츠 테이블 -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">ID</th>
+            <th>제목</th>
+            <th>상태</th>
+            <th>Extra Data</th>
+            <th>생성일시</th>
+            <th class="pe-4"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr th:if="${#lists.isEmpty(contents)}">
+            <td colspan="6" class="text-center py-5 text-muted">
+              등록된 콘텐츠가 없습니다. <a th:href="@{/content/new}">새 콘텐츠 등록</a>
+            </td>
+          </tr>
+          <tr th:each="c : ${contents}">
+            <td class="ps-4 text-muted" th:text="'#' + ${c.id}">1</td>
+            <td class="fw-medium" th:text="${c.title}">제목</td>
+            <td>
+              <span class="badge"
+                    th:classappend="${c.status == 'READY'} ? 'bg-warning text-dark' :
+                                   (${c.status == 'PROCESSING'} ? 'bg-primary' : 'bg-success')"
+                    th:text="${c.status}">READY</span>
+            </td>
+            <td>
+              <code class="small text-muted" th:text="${c.extraData != null ? c.extraData : '-'}"></code>
+            </td>
+            <td class="text-muted small"
+                th:text="${#temporals.format(c.createdAt, 'MM-dd HH:mm:ss')}">-</td>
+            <td class="pe-4">
+              <a th:href="@{/content/{id}(id=${c.id})}" class="btn btn-sm btn-outline-secondary">상세</a>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mt-3 text-muted small">
+    총 <strong th:text="${#lists.size(contents)}">0</strong>건
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

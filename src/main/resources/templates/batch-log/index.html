@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>배치 실행 로그</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+  <style>
+    .status-running { color: #0d6efd; }
+    .status-done    { color: #198754; }
+    .status-failed  { color: #dc3545; }
+
+    .tenant-pill {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      margin-right: 4px;
+    }
+    .tenant-ok    { background: #d1fae5; color: #065f46; }
+    .tenant-error { background: #fee2e2; color: #991b1b; }
+
+    .batch-table th { font-size: 0.85rem; color: #6c757d; font-weight: 600; }
+    .batch-table td { vertical-align: middle; font-size: 0.88rem; }
+    .batch-table tr:hover { background: #f8f9fa; }
+
+    .refresh-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #198754;
+      display: inline-block;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      border-left: 4px solid #0d6efd;
+      padding-left: 12px;
+    }
+    .empty-state {
+      padding: 60px 0;
+      text-align: center;
+      color: #adb5bd;
+    }
+  </style>
+</head>
+<body>
+
+<div th:replace="~{layout/navbar :: navbar(${tenantId})}"></div>
+
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="fw-bold mb-1">📋 배치 실행 로그</h3>
+      <span class="text-muted small">
+        <span class="refresh-dot me-1"></span>5초마다 자동 갱신 &nbsp;|&nbsp;
+        최근 50건 인메모리 보관
+      </span>
+    </div>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="text-muted small" id="last-updated">-</span>
+      <button class="btn btn-outline-secondary btn-sm" onclick="fetchLogs()">↺ 새로고침</button>
+      <button class="btn btn-outline-danger btn-sm" onclick="clearLogs()">🗑 초기화</button>
+    </div>
+  </div>
+
+  <!-- 요약 카드 -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center p-3">
+        <div class="fs-2 fw-bold text-primary" id="summary-total">-</div>
+        <div class="text-muted small">총 실행 횟수</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center p-3">
+        <div class="fs-2 fw-bold text-success" id="summary-done">-</div>
+        <div class="text-muted small">성공(DONE)</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center p-3">
+        <div class="fs-2 fw-bold text-warning" id="summary-running">-</div>
+        <div class="text-muted small">실행 중(RUNNING)</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-0 shadow-sm text-center p-3">
+        <div class="fs-2 fw-bold text-muted" id="summary-avg">-</div>
+        <div class="text-muted small">평균 소요 시간</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 배치 로그 테이블 -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <div class="section-title mb-3">실행 이력</div>
+      <div id="log-table-wrap">
+        <table class="table batch-table mb-0" id="log-table">
+          <thead class="table-light">
+            <tr>
+              <th style="width:110px">Batch ID</th>
+              <th style="width:160px">시작 시간</th>
+              <th style="width:80px">상태</th>
+              <th style="width:90px">소요 시간</th>
+              <th>테넌트별 결과</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody">
+            <!-- 서버사이드 초기 렌더링 -->
+            <tr th:if="${logs.empty}">
+              <td colspan="5" class="empty-state">아직 배치가 실행되지 않았습니다.</td>
+            </tr>
+            <tr th:each="log : ${logs}" th:if="${!logs.empty}">
+              <td><code th:text="${log.batchId}">-</code></td>
+              <td class="text-muted" th:text="${#temporals.format(log.startTime, 'MM-dd HH:mm:ss')}">-</td>
+              <td>
+                <span th:if="${log.status == 'RUNNING'}"
+                      class="badge bg-primary">
+                  <span class="spinner-border spinner-border-sm me-1" style="width:.6rem;height:.6rem;"></span>RUNNING
+                </span>
+                <span th:if="${log.status == 'DONE'}"   class="badge bg-success">DONE</span>
+                <span th:if="${log.status == 'FAILED'}" class="badge bg-danger">FAILED</span>
+              </td>
+              <td th:text="${log.durationMs > 0 ? log.durationMs + 'ms' : '-'}">-</td>
+              <td>
+                <span th:if="${log.tenantResults == null}" class="text-muted small">처리 중...</span>
+                <span th:each="tr : ${log.tenantResults}"
+                      th:class="'tenant-pill ' + (${tr.status == 'OK'} ? 'tenant-ok' : 'tenant-error')"
+                      th:text="${tr.tenantId} + ': ' + ${tr.readyCount} + '건'">
+                </span>
+                <span th:if="${log.status == 'FAILED' and log.errorMessage != null}"
+                      class="text-danger small" th:text="${log.errorMessage}"></span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 동작 원리 설명 -->
+  <div class="card border-0 shadow-sm mt-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-3">ShedLock 동작 원리</div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="bg-light p-3 rounded">
+            <p class="fw-bold mb-2 small">분산 락 흐름</p>
+            <ol class="small text-muted mb-0">
+              <li>배치 시작 → <code>CM_SHEDLOCK</code>에 <code>lock_until</code> 기록</li>
+              <li>다른 서버: 같은 배치 시도 → <code>lock_until</code>이 미래 → <strong>SKIP</strong></li>
+              <li>배치 완료 → <code>lock_until</code>을 현재 시각으로 갱신 (락 해제)</li>
+              <li>서버 다운 → <code>lockAtMostFor</code> 만료 후 자동 해제</li>
+            </ol>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="bg-light p-3 rounded h-100">
+            <p class="fw-bold mb-2 small">현재 설정</p>
+            <pre class="small mb-0" style="font-size:11px;">@Scheduled(fixedDelay = 30_000)
+@SchedulerLock(
+  name = "contentProcessingBatch",
+  lockAtMostFor = "25s",   // 서버 다운 시 자동 해제
+  lockAtLeastFor = "5s"    // 최소 락 유지
+)</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  const POLL_INTERVAL = 5000;
+
+  function fmtTime(isoStr) {
+    if (!isoStr) return '-';
+    const d = new Date(isoStr);
+    return d.toLocaleString('ko-KR', { month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false });
+  }
+
+  function statusBadge(status) {
+    if (status === 'RUNNING') return `<span class="badge bg-primary"><span class="spinner-border spinner-border-sm me-1" style="width:.6rem;height:.6rem;"></span>RUNNING</span>`;
+    if (status === 'DONE')    return `<span class="badge bg-success">DONE</span>`;
+    if (status === 'FAILED')  return `<span class="badge bg-danger">FAILED</span>`;
+    return `<span class="badge bg-secondary">${status}</span>`;
+  }
+
+  function tenantPills(results) {
+    if (!results || results.length === 0) return '<span class="text-muted small">처리 중...</span>';
+    return results.map(tr => {
+      const cls = tr.status === 'OK' ? 'tenant-ok' : 'tenant-error';
+      return `<span class="tenant-pill ${cls}">${tr.tenantId}: ${tr.readyCount}건</span>`;
+    }).join('');
+  }
+
+  function renderTable(logs) {
+    const tbody = document.getElementById('log-tbody');
+    if (logs.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="empty-state">아직 배치가 실행되지 않았습니다.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = logs.map(log => `
+      <tr>
+        <td><code>${log.batchId}</code></td>
+        <td class="text-muted">${fmtTime(log.startTime)}</td>
+        <td>${statusBadge(log.status)}</td>
+        <td>${log.durationMs > 0 ? log.durationMs + 'ms' : '-'}</td>
+        <td>${tenantPills(log.tenantResults)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function renderSummary(logs) {
+    const total   = logs.length;
+    const done    = logs.filter(l => l.status === 'DONE').length;
+    const running = logs.filter(l => l.status === 'RUNNING').length;
+    const doneMs  = logs.filter(l => l.durationMs > 0).map(l => l.durationMs);
+    const avg     = doneMs.length > 0 ? Math.round(doneMs.reduce((a, b) => a + b, 0) / doneMs.length) : 0;
+
+    document.getElementById('summary-total').textContent   = total;
+    document.getElementById('summary-done').textContent    = done;
+    document.getElementById('summary-running').textContent = running;
+    document.getElementById('summary-avg').textContent     = avg > 0 ? avg + 'ms' : '-';
+  }
+
+  async function fetchLogs() {
+    try {
+      const r = await fetch('/batch-log/api');
+      const logs = await r.json();
+      renderTable(logs);
+      renderSummary(logs);
+      document.getElementById('last-updated').textContent =
+        '갱신: ' + new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    } catch (e) {
+      console.error('배치 로그 조회 실패:', e);
+    }
+  }
+
+  async function clearLogs() {
+    if (!confirm('배치 로그를 초기화하시겠습니까?')) return;
+    await fetch('/batch-log/clear', { method: 'POST' });
+    fetchLogs();
+  }
+
+  // 초기 로드 및 자동 폴링
+  fetchLogs();
+  setInterval(fetchLogs, POLL_INTERVAL);
+</script>
+</body>
+</html>

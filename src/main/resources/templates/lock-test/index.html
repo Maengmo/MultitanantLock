@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Lock 테스트 대시보드</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" th:href="@{/css/style.css}">
+  <style>
+    .log-box {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      min-height: 200px;
+      max-height: 300px;
+      overflow-y: auto;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .log-box .log-time { color: #a6e3a1; }
+    .log-box .log-req  { color: #89b4fa; font-weight: bold; }
+    .log-box .log-wait { color: #fab387; }
+    .log-box .log-lock { color: #a6e3a1; font-weight: bold; }
+    .log-box .log-done { color: #b4befe; }
+    .log-box .log-info { color: #89dceb; }
+    .log-box .log-skip { color: #cba6f7; }
+    .result-card {
+      transition: all 0.3s ease;
+      min-height: 180px;
+    }
+    .result-card.active { border-color: #0d6efd !important; }
+    .result-card.done   { border-color: #198754 !important; }
+    .status-badge {
+      font-size: 0.9rem;
+      padding: 6px 12px;
+      border-radius: 20px;
+    }
+    .spinner-border-sm { width: 1rem; height: 1rem; }
+    .timeline-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: #e9ecef;
+      overflow: hidden;
+    }
+    .timeline-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      border-left: 4px solid #0d6efd;
+      padding-left: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div th:replace="~{layout/navbar :: navbar(${tenantId})}"></div>
+
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="fw-bold mb-1">🔒 Lock 테스트 대시보드</h3>
+      <span class="text-muted">tenant: <strong th:text="${tenantId}">-</strong></span>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm" onclick="resetAll()">
+      ↺ 전체 READY 초기화
+    </button>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- 시나리오 1: Pessimistic Lock              -->
+  <!-- ========================================= -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-2">시나리오 1: Pessimistic Write Lock</div>
+      <p class="text-muted mb-3">
+        동시에 같은 콘텐츠를 수정할 때 충돌 방지.<br>
+        <code>SELECT ... FOR UPDATE</code> → 한 요청이 락을 잡으면 다른 요청은 DB에서 블로킹(WAITING)된다.
+      </p>
+
+      <!-- 콘텐츠 선택 -->
+      <div class="row align-items-end g-2 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-medium">테스트 대상 콘텐츠 선택</label>
+          <select id="pessimisticContentId" class="form-select">
+            <option th:each="c : ${contents}"
+                    th:value="${c.id}"
+                    th:text="'#' + ${c.id} + ' - ' + ${c.title} + ' [' + ${c.status} + ']'">
+            </option>
+          </select>
+        </div>
+        <div class="col-md-auto">
+          <button class="btn btn-warning text-dark px-4" onclick="runPessimisticTest()">
+            ⚡ 동시 2개 요청 실행
+          </button>
+        </div>
+      </div>
+
+      <!-- 결과 카드 (2개 나란히) -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-req1">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">REQ-1</span>
+                <span id="badge-req1" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-req1" class="text-muted small">요청 준비됨</div>
+              <div class="mt-2">
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                  <span>대기시간</span>
+                  <span id="wait-req1">-</span>
+                </div>
+                <div class="d-flex justify-content-between small text-muted">
+                  <span>처리시간</span>
+                  <span id="process-req1">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-req2">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-danger">REQ-2</span>
+                <span id="badge-req2" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-req2" class="text-muted small">요청 준비됨</div>
+              <div class="mt-2">
+                <div class="d-flex justify-content-between small text-muted mb-1">
+                  <span>대기시간</span>
+                  <span id="wait-req2">-</span>
+                </div>
+                <div class="d-flex justify-content-between small text-muted">
+                  <span>처리시간</span>
+                  <span id="process-req2">-</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실시간 로그 -->
+      <div class="log-box" id="log-pessimistic">
+        <span class="log-info">// 버튼을 클릭하면 실시간 로그가 표시됩니다</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- 시나리오 2: ShedLock (배치)               -->
+  <!-- ========================================= -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-2">시나리오 2: ShedLock 배치 중복 실행 방지</div>
+      <p class="text-muted mb-3">
+        여러 서버에서 동시에 배치가 실행될 때 단 하나만 실행된다.<br>
+        <code>CM_SHEDLOCK</code> 테이블에 잠금 정보를 기록해 분산 환경에서 중복 방지.
+      </p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="bg-light p-3 rounded">
+            <p class="fw-bold mb-2 small">동작 원리</p>
+            <ol class="small text-muted mb-0">
+              <li>서버 A: <code>INSERT INTO CM_SHEDLOCK</code> 성공 → 배치 실행</li>
+              <li>서버 B: INSERT 실패 (이미 잠김) → 배치 <strong>SKIP</strong></li>
+              <li>배치 완료 후 → <code>LOCK_UNTIL</code> 갱신</li>
+            </ol>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="bg-light p-3 rounded h-100">
+            <p class="fw-bold mb-2 small">스케줄러 설정</p>
+            <pre class="small mb-0" style="font-size:11px;">@Scheduled(fixedDelay = 30_000)
+@SchedulerLock(
+  name = "contentProcessingBatch",
+  lockAtMostFor = "25s",
+  lockAtLeastFor = "5s"
+)</pre>
+          </div>
+        </div>
+      </div>
+      <div class="alert alert-secondary mt-3 mb-0 small">
+        💡 서버 실행 로그에서 <code>[BATCH] [LOCK ACQUIRED]</code>를 확인하세요.
+        서버 2대를 기동하면 하나만 실행되는 것을 확인할 수 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- 시나리오 3: SKIP LOCKED                   -->
+  <!-- ========================================= -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-2">시나리오 3: SKIP LOCKED 큐 처리</div>
+      <p class="text-muted mb-3">
+        여러 Worker가 동시에 READY 항목을 처리할 때 중복 없이 분산 처리.<br>
+        <code>FOR UPDATE SKIP LOCKED</code> → 이미 잠긴 행은 건너뛰고 다음 항목을 잡는다.
+      </p>
+
+      <button class="btn btn-info text-dark px-4 mb-3" onclick="runSkipLockedTest()">
+        ⚡ Worker 3개 동시 실행
+      </button>
+
+      <!-- Worker 상태 카드 -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-4" th:each="i : ${#numbers.sequence(1, 3)}">
+          <div class="card result-card border" th:id="'card-worker' + ${i}">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold" th:text="'WORKER-' + ${i}">WORKER</span>
+                <span class="status-badge badge bg-secondary" th:id="'badge-worker' + ${i}">대기 중</span>
+              </div>
+              <div class="text-muted small" th:id="'status-worker' + ${i}">요청 준비됨</div>
+              <div class="mt-1 small text-muted" th:id="'item-worker' + ${i}">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 실시간 로그 -->
+      <div class="log-box" id="log-skiplock">
+        <span class="log-info">// 버튼을 클릭하면 실시간 로그가 표시됩니다</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- 시나리오 4: Optimistic Lock              -->
+  <!-- ========================================= -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-2">시나리오 4: Optimistic Lock (낙관적 락)</div>
+      <p class="text-muted mb-3">
+        락 없이 읽고, 커밋 시점에 <code>@Version</code>으로 충돌 감지.<br>
+        두 요청이 동시에 같은 데이터를 읽으면 → 먼저 커밋한 쪽만 성공, 나중은 <strong>CONFLICT</strong>.
+      </p>
+
+      <div class="row align-items-end g-2 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-medium">테스트 대상 콘텐츠 선택</label>
+          <select id="optimisticContentId" class="form-select">
+            <option th:each="c : ${contents}"
+                    th:value="${c.id}"
+                    th:text="'#' + ${c.id} + ' - ' + ${c.title} + ' [version=' + ${c.version} + ']'">
+            </option>
+          </select>
+        </div>
+        <div class="col-md-auto">
+          <button class="btn btn-purple text-white px-4" style="background:#7c3aed;"
+                  onclick="runOptimisticTest()">
+            ⚡ 동시 2개 요청 실행
+          </button>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-opt1">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">OPT-1</span>
+                <span id="badge-opt1" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-opt1" class="text-muted small">요청 준비됨</div>
+              <div class="mt-1 small text-muted" id="item-opt1">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-opt2">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-danger">OPT-2</span>
+                <span id="badge-opt2" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-opt2" class="text-muted small">요청 준비됨</div>
+              <div class="mt-1 small text-muted" id="item-opt2">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="log-box" id="log-optimistic">
+        <span class="log-info">// 버튼을 클릭하면 실시간 로그가 표시됩니다</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================= -->
+  <!-- 시나리오 5: NOWAIT                        -->
+  <!-- ========================================= -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="section-title mb-2">시나리오 5: FOR UPDATE NOWAIT</div>
+      <p class="text-muted mb-3">
+        락을 즉시 획득하지 못하면 대기 없이 바로 실패.<br>
+        REQ-1이 락을 잡고 있는 동안 REQ-2는 <code>FOR UPDATE NOWAIT</code>로 즉시 <strong>FAILED</strong>.
+      </p>
+
+      <div class="row align-items-end g-2 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-medium">테스트 대상 콘텐츠 선택</label>
+          <select id="nowaitContentId" class="form-select">
+            <option th:each="c : ${contents}"
+                    th:value="${c.id}"
+                    th:text="'#' + ${c.id} + ' - ' + ${c.title} + ' [' + ${c.status} + ']'">
+            </option>
+          </select>
+        </div>
+        <div class="col-md-auto">
+          <button class="btn btn-dark px-4" onclick="runNowaitTest()">
+            ⚡ 동시 2개 요청 실행
+          </button>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-nw1">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-primary">NW-1 (선점)</span>
+                <span id="badge-nw1" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-nw1" class="text-muted small">요청 준비됨</div>
+              <div class="mt-1 small text-muted" id="item-nw1">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card result-card border" id="card-nw2">
+            <div class="card-body p-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-danger">NW-2 (즉시 실패)</span>
+                <span id="badge-nw2" class="status-badge badge bg-secondary">대기 중</span>
+              </div>
+              <div id="status-nw2" class="text-muted small">요청 준비됨</div>
+              <div class="mt-1 small text-muted" id="item-nw2">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="log-box" id="log-nowait">
+        <span class="log-info">// 버튼을 클릭하면 실시간 로그가 표시됩니다</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 콘텐츠 상태 현황 -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <span class="section-title">콘텐츠 현재 상태</span>
+        <button class="btn btn-outline-secondary btn-sm" onclick="refreshStatus()">새로고침</button>
+      </div>
+      <div id="content-status-table">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>ID</th><th>제목</th><th>상태</th><th>버전</th></tr>
+          </thead>
+          <tbody>
+            <tr th:each="c : ${contents}">
+              <td class="text-muted" th:text="'#' + ${c.id}">1</td>
+              <td th:text="${c.title}">제목</td>
+              <td>
+                <span class="badge"
+                      th:classappend="${c.status == 'READY'} ? 'bg-warning text-dark' :
+                                     (${c.status == 'PROCESSING'} ? 'bg-primary' : 'bg-success')"
+                      th:text="${c.status}">READY</span>
+              </td>
+              <td class="text-muted small" th:text="${c.version}">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script th:src="@{/js/lock-test.js}"></script>
+</body>
+</html>

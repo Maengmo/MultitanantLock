@@ -1,0 +1,55 @@
+/* ============================================
+   CLM 멀티테넌트 - 테넌트 테마 CSS
+   ============================================ */
+
+/* 테넌트 네비게이션 바 컬러 */
+.bg-townboard {
+  background-color: #1a237e !important; /* 진한 남색 */
+}
+
+.bg-joongang {
+  background-color: #b71c1c !important; /* 중앙일보 레드 */
+}
+
+/* 히어로 배너 */
+.hero-townboard {
+  background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%);
+}
+
+.hero-joongang {
+  background: linear-gradient(135deg, #b71c1c 0%, #c62828 50%, #e53935 100%);
+}
+
+.hero-default {
+  background: linear-gradient(135deg, #424242 0%, #616161 100%);
+}
+
+/* 공통 카드 호버 효과 */
+.card {
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 로그 박스 스크롤바 */
+.log-box::-webkit-scrollbar {
+  width: 6px;
+}
+
+.log-box::-webkit-scrollbar-track {
+  background: #313244;
+  border-radius: 3px;
+}
+
+.log-box::-webkit-scrollbar-thumb {
+  background: #585b70;
+  border-radius: 3px;
+}
+
+/* 코드 스타일 */
+pre {
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
